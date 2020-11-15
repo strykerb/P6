@@ -43,16 +43,17 @@ class Individual_Grid(object):
     def calculate_fitness(self):
         measurements = metrics.metrics(self.to_level())
         # Print out the possible measurements or look at the implementation of metrics.py for other keys:
-        # print(measurements.keys())
+        #print(measurements.keys())
+        #print(measurements.values())
         # Default fitness function: Just some arbitrary combination of a few criteria.  Is it good?  Who knows?
         # STUDENT Modify this, and possibly add more metrics.  You can replace this with whatever code you like.
         coefficients = dict(
             meaningfulJumpVariance=0.5,
-            negativeSpace=0.6,
+            negativeSpace=1.0,
             pathPercentage=0.5,
-            emptyPercentage=0.6,
+            emptyPercentage=1.0,
             linearity=-0.5,
-            solvability=2.0
+            solvability=3.0
         )
         self._fitness = sum(map(lambda m: coefficients[m] * measurements[m],
                                 coefficients))
@@ -69,12 +70,33 @@ class Individual_Grid(object):
         # STUDENT implement a mutation operator, also consider not mutating this individual
         # STUDENT also consider weighting the different tile types so it's not uniformly random
         # STUDENT consider putting more constraints on this to prevent pipes in the air, etc
-
+        MUTATION_RATE = 0.2
         left = 1
         right = width - 1
         for y in range(height):
             for x in range(left, right):
-                pass
+                if y == 11 or y == 7 or y == 3:
+                    if genome[y][x] != "T" and genome[y][x] != "o":
+                        rand = random.random()
+                        if genome[y][x-1] in "MB?X":
+                            rand += 0.1
+                        if rand > 0.9:
+                            genome[y][x] = "M"
+                        elif rand > 0.8:
+                            genome[y][x] = "?"
+                        elif rand > 0.7:
+                            genome[y][x] = "B"
+                        elif rand > 0.5:
+                            genome[y][x] = "X"
+                        else:
+                            genome[y][x] = "-"
+                    elif x > 3:
+                        rand = random.random()
+                        if rand > MUTATION_RATE:
+                            index = math.ceil(random.uniform(0,8))
+                            genome[y][x] = options[index]
+
+
         return genome
 
     # Create zero or more children from self and other
@@ -84,17 +106,56 @@ class Individual_Grid(object):
         # do crossover with other
         left = 1
         right = width - 1
-        for y in range(height):
-            for x in range(left, right):
-                # STUDENT Which one should you take?  Self, or other?  Why?
-                # STUDENT consider putting more constraints on this to prevent pipes in the air, etc
-                rand = random.random()
-                if rand > 0.55:
-                    new_genome[y][x] = self[y][x]
+        max = self._fitness + other._fitness
+        for x in range(left, right):
+            # STUDENT Which one should you take?  Self, or other?  Why?
+            # STUDENT consider putting more constraints on this to prevent pipes in the air, etc
+
+            #rand = random.uniform(0, max)
+            rand = random.random()
+            #if rand > other._fitness:
+            temp = None
+            if rand > 0.55:
+                temp = self.genome
+            else:
+                temp = other.genome
+            pipe = False
+            for y in range(height):
+                enemy_count = 0
+                #print("examining (" + str(x) + "," + str(y) + ")")
+                if new_genome[y][x-1] == "|" or new_genome[y][x-1] == "T":
+                    new_genome[y][x] = "-"
+                elif pipe:
+                    new_genome[y][x] = "|"
+                elif temp[y][x] == "|":
+                    new_genome[y][x] = "-"
+                elif temp[y][x] == "T":
+                    if y < 11:
+                        new_genome[y][x] = "-"
+                    else:
+                        pipe = True
+                        new_genome[y][x] = "T"
+                        new_genome[y-1][x] = "-"
+                        new_genome[y-2][x] = "-"
+                elif temp[y][x] == "?" or temp[y][x] == "B" or temp[y][x] == "M":
+                    if y == 11 or y == 7 or y == 3:
+                        new_genome[y][x] = temp[y][x]
+                        new_genome[y+1][x] = "-"
+                        new_genome[y+2][x] = "-"
+                        new_genome[y+3][x] = "-"
+                elif temp[y][x] == "E":
+                    if enemy_count > 0 or x < 3:
+                        new_genome[y][x] = "-"
+                    else:
+                        new_genome[y][x] = "E"
+                        enemy_count += 1
                 else:
-                    new_genome[y][x] = other[y][x]
+                    new_genome[y][x] = temp[y][x]
+        child = Individual_Grid(new_genome)
+        child.genome = child.mutate(new_genome)
         # do mutation; note we're returning a one-element tuple here
-        return (Individual_Grid(new_genome),)
+        #return (Individual_Grid(new_genome),)
+        return child
 
     # Turn the genome into a level string (easy for this genome)
     def to_level(self):
@@ -169,7 +230,7 @@ class Individual_DE(object):
             pathPercentage=0.5,
             emptyPercentage=0.6,
             linearity=-0.5,
-            solvability=2.0
+            solvability=5.0
         )
         penalties = 0
         # STUDENT For example, too many stairs are unaesthetic.  Let's penalize that
@@ -348,12 +409,32 @@ class Individual_DE(object):
 
 Individual = Individual_Grid
 
+def access_fitness(elem):
+    return elem._fitness
 
 def generate_successors(population):
+    MAX_SUCCESSORS = 20
     results = []
-    # STUDENT Design and implement this
-    # Hint: Call generate_children() on some individuals and fill up results.
-    return population
+    i = 0
+    j = 0
+    population.sort(key = access_fitness, reverse = True)
+    if population[0]._fitness < 2.73:
+
+        population.insert(0, Individual.empty_individual())
+        population[0].calculate_fitness()
+    while j < MAX_SUCCESSORS:
+        while i < MAX_SUCCESSORS:
+            if i != j:
+                results.append(population[i].generate_children(population[j]))
+                #print(str(results))
+                #print("i = " + str(i))
+                #print("j = " + str(j))
+            i += 1
+            # STUDENT Design and implement this
+            # Hint: Call generate_children() on some individuals and fill up results.
+        j += 1
+        i = 0
+    return results
 
 
 def ga():
@@ -367,9 +448,12 @@ def ga():
     with mpool.Pool(processes=os.cpu_count()) as pool:
         init_time = time.time()
         # STUDENT (Optional) change population initialization
-        population = [Individual.random_individual() if random.random() < 0.9
+        population = [Individual.random_individual() for _g in range(pop_limit)]
+        """
+        population = [Individual.random_individual() if random.random() < 0.90
                       else Individual.empty_individual()
                       for _g in range(pop_limit)]
+        """
         #print(population)
         # But leave this line alone; we have to reassign to population because we get a new population that has more cached stuff in it.
         population = pool.map(Individual.calculate_fitness,
@@ -387,7 +471,6 @@ def ga():
                 now = time.time()
                 # Print out statistics
                 if generation > 0:
-                    print(population.pop().fitness)
                     best = max(population, key=Individual.fitness)
                     print("Generation:", str(generation))
                     print("Max fitness:", str(best.fitness()))
@@ -398,7 +481,7 @@ def ga():
                             f.write("".join(row) + "\n")
                 generation += 1
                 # STUDENT Determine stopping condition
-                if generation > 10:
+                if generation > 20:
                     stop_condition = True
                 else:
                     stop_condition = False
